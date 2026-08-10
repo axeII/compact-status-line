@@ -97,6 +97,9 @@ if [ -n "$git_branch" ]; then
     line1+=" ${dim}•${reset} ${magenta}${git_branch}${red}${git_dirty}${reset}"
 fi
 
+# ── Context window usage ─────────────────────────────────
+ctx_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
+
 # ── Rate limits: prefer the hook payload, fall back to the API ──
 five_pct=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty')
 five_reset=$(echo "$input" | jq -r '.rate_limits.five_hour.resets_at // empty')
@@ -141,9 +144,16 @@ if [ -z "$five_pct" ]; then
     fi
 fi
 
-# ── Line 2: 5h usage • 7d usage ──────────────────────────
+# ── Line 2: ctx usage • 5h usage • 7d usage ──────────────
 line2=""
 now_epoch=$(date +%s)
+
+if [ -n "$ctx_pct" ]; then
+    ctx_pct_i=$(printf "%.0f" "$ctx_pct" 2>/dev/null)
+    ctx_color=$(color_for_pct "$ctx_pct_i")
+
+    line2+="${white}ctx${reset} ${ctx_color}${ctx_pct_i}%${reset}"
+fi
 
 if [ -n "$five_pct" ]; then
     five_pct_i=$(printf "%.0f" "$five_pct" 2>/dev/null)
@@ -151,6 +161,7 @@ if [ -n "$five_pct" ]; then
     five_epoch=$(iso_to_epoch "$five_reset")
     five_left=$(format_remaining $(( five_epoch - now_epoch )))
 
+    [ -n "$line2" ] && line2+=" ${dim}•${reset} "
     line2+="${white}5h${reset} ${five_color}${five_pct_i}%${reset}"
     [ -n "$five_left" ] && line2+=" ${dim}(${five_left})${reset}"
 fi
