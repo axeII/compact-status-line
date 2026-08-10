@@ -1,0 +1,224 @@
+#!/usr/bin/env node
+
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+
+const CLAUDE_DIR = path.join(os.homedir(), ".claude");
+const SETTINGS_FILE = path.join(CLAUDE_DIR, "settings.json");
+const STATUSLINE_DEST = path.join(CLAUDE_DIR, "statusline.sh");
+const STATUSLINE_SRC = path.resolve(__dirname, "statusline.sh");
+const CREDENTIALS_FILE = path.join(CLAUDE_DIR, ".credentials.json");
+const TOKEN_FILE = path.join(CLAUDE_DIR, "statusline-token");
+
+const blue = "\x1b[38;2;0;153;255m";
+const green = "\x1b[38;2;0;175;80m";
+const red = "\x1b[38;2;255;85;85m";
+const yellow = "\x1b[38;2;230;200;0m";
+const dim = "\x1b[2m";
+const reset = "\x1b[0m";
+
+function log(msg) {
+  console.log(`  ${msg}`);
+}
+
+function success(msg) {
+  console.log(`  ${green}✓${reset} ${msg}`);
+}
+
+function warn(msg) {
+  console.log(`  ${yellow}!${reset} ${msg}`);
+}
+
+function fail(msg) {
+  console.error(`  ${red}✗${reset} ${msg}`);
+}
+
+function checkDeps() {
+  const { execSync } = require("child_process");
+  const missing = [];
+
+  try {
+    execSync("which jq", { stdio: "ignore" });
+  } catch {
+    missing.push("jq");
+  }
+
+  return missing;
+}
+
+// Rate limits normally arrive on stdin with every hook call. The token file
+// is only a fallback for older Claude Code versions that don't send them,
+// so the statusline script can hit the usage API itself. We resolve it once
+// here (env var, the Linux/file-based credentials store, or macOS Keychain)
+// and write it to a plain file — the statusline script then just reads that
+// file on every render instead of shelling out to the Keychain each time.
+function resolveToken() {
+  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
+    return process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  }
+
+  if (fs.existsSync(CREDENTIALS_FILE)) {
+    try {
+      const creds = JSON.parse(fs.readFileSync(CREDENTIALS_FILE, "utf-8"));
+      const token = creds?.claudeAiOauth?.accessToken;
+      if (token) return token;
+    } catch {
+      // ignore malformed credentials file
+    }
+  }
+
+  if (process.platform === "darwin") {
+    const { execFileSync } = require("child_process");
+    try {
+      const blob = execFileSync(
+        "security",
+        ["find-generic-password", "-s", "Claude Code-credentials", "-w"],
+        { stdio: ["ignore", "pipe", "ignore"] }
+      ).toString();
+      const token = JSON.parse(blob)?.claudeAiOauth?.accessToken;
+      if (token) return token;
+    } catch {
+      // Keychain entry not found, or access denied — that's fine.
+    }
+  }
+
+  return null;
+}
+
+function writeTokenFile() {
+  const token = resolveToken();
+  if (!token) return false;
+
+  fs.writeFileSync(TOKEN_FILE, token, { mode: 0o600 });
+  fs.chmodSync(TOKEN_FILE, 0o600);
+  return true;
+}
+
+function uninstall() {
+  console.log();
+  console.log(`  ${blue}compact-status-line Uninstaller${reset}`);
+  console.log(`  ${dim}───────────────────────────────${reset}`);
+  console.log();
+
+  const backup = STATUSLINE_DEST + ".bak";
+
+  if (fs.existsSync(backup)) {
+    fs.copyFileSync(backup, STATUSLINE_DEST);
+    fs.unlinkSync(backup);
+    success(`Restored previous statusline from ${dim}statusline.sh.bak${reset}`);
+  } else if (fs.existsSync(STATUSLINE_DEST)) {
+    fs.unlinkSync(STATUSLINE_DEST);
+    success(`Removed ${dim}statusline.sh${reset}`);
+  } else {
+    warn("No statusline found — nothing to remove");
+  }
+
+  if (fs.existsSync(TOKEN_FILE)) {
+    fs.unlinkSync(TOKEN_FILE);
+    success(`Removed ${dim}statusline-token${reset}`);
+  }
+
+  if (fs.existsSync(SETTINGS_FILE)) {
+    try {
+      const settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf-8"));
+      if (settings.statusLine) {
+        delete settings.statusLine;
+        fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2) + "\n");
+        success(`Removed statusLine from ${dim}settings.json${reset}`);
+      } else {
+        success("Settings already clean");
+      }
+    } catch {
+      fail(`Could not parse ${SETTINGS_FILE} — fix it manually`);
+      process.exit(1);
+    }
+  }
+
+  console.log();
+  log(`${green}Done!${reset} Restart Claude Code to apply changes.`);
+  console.log();
+}
+
+function run() {
+  if (process.argv.includes("--uninstall")) {
+    uninstall();
+    return;
+  }
+
+  console.log();
+  console.log(`  ${blue}compact-status-line Installer${reset}`);
+  console.log(`  ${dim}──────────────────────────────${reset}`);
+  console.log();
+
+  const missing = checkDeps();
+  if (missing.length > 0) {
+    fail(`Missing required dependency: ${missing.join(", ")}`);
+    log(`Install it and try again.`);
+    log(`${dim}brew install jq${reset}  (or apt/dnf/pacman install jq)`);
+    process.exit(1);
+  }
+  success("Dependencies found (jq)");
+
+  if (!fs.existsSync(CLAUDE_DIR)) {
+    fs.mkdirSync(CLAUDE_DIR, { recursive: true });
+    success(`Created ${CLAUDE_DIR}`);
+  }
+
+  const backup = STATUSLINE_DEST + ".bak";
+  if (fs.existsSync(STATUSLINE_DEST)) {
+    fs.copyFileSync(STATUSLINE_DEST, backup);
+    warn(`Backed up existing statusline to ${dim}statusline.sh.bak${reset}`);
+  }
+
+  fs.copyFileSync(STATUSLINE_SRC, STATUSLINE_DEST);
+  fs.chmodSync(STATUSLINE_DEST, 0o755);
+  success(`Installed statusline to ${dim}${STATUSLINE_DEST}${reset}`);
+
+  if (fs.existsSync(TOKEN_FILE)) {
+    success(`Token file already present at ${dim}${TOKEN_FILE}${reset}`);
+  } else if (writeTokenFile()) {
+    success(`Saved a usage-API token to ${dim}${TOKEN_FILE}${reset}`);
+  } else {
+    warn("No token found for the rate-limit API fallback");
+    log(
+      `  ${dim}Only needed if your Claude Code version doesn't send rate limits on stdin.${reset}`
+    );
+    log(
+      `  ${dim}To enable it, put a token in ${TOKEN_FILE} or set CLAUDE_CODE_OAUTH_TOKEN.${reset}`
+    );
+  }
+
+  let settings = {};
+  if (fs.existsSync(SETTINGS_FILE)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf-8"));
+    } catch {
+      fail(`Could not parse ${SETTINGS_FILE} — fix it manually`);
+      process.exit(1);
+    }
+  }
+
+  const statusLineConfig = {
+    type: "command",
+    command: 'bash "$HOME/.claude/statusline.sh"',
+  };
+
+  if (
+    settings.statusLine &&
+    settings.statusLine.type === "command" &&
+    settings.statusLine.command === statusLineConfig.command
+  ) {
+    success("Settings already configured");
+  } else {
+    settings.statusLine = statusLineConfig;
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2) + "\n");
+    success(`Updated ${dim}settings.json${reset} with statusLine config`);
+  }
+
+  console.log();
+  log(`${green}Done!${reset} Restart Claude Code to see your new status line.`);
+  console.log();
+}
+
+run();

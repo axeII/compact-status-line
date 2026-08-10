@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Check install.js syntax
+        run: node --check bin/install.js
+
+      - name: Check statusline.sh syntax
+        run: bash -n bin/statusline.sh
+
+      - name: Statusline renders with rate limits on stdin
+        run: |
+          set -e
+          out=$(printf '{"model":{"display_name":"Sonnet 5"},"cwd":"%s","rate_limits":{"five_hour":{"used_percentage":94,"resets_at":"2099-01-01T00:00:00Z"},"seven_day":{"used_percentage":11,"resets_at":"2099-01-08T00:00:00Z"}}}' "$PWD" | bash bin/statusline.sh)
+          echo "$out"
+          echo "$out" | grep -q "Sonnet 5"
+          echo "$out" | grep -q "5h"
+          echo "$out" | grep -q "7d"
+
+      - name: Statusline degrades gracefully with no input
+        run: |
+          set -e
+          out=$(printf '' | bash bin/statusline.sh)
+          [ "$out" = "Claude" ]
+
+      - name: Installer runs end-to-end against a scratch HOME
+        run: |
+          set -e
+          export HOME="$RUNNER_TEMP/fake-home"
+          mkdir -p "$HOME"
+          node bin/install.js
+          test -f "$HOME/.claude/statusline.sh"
+          grep -q statusLine "$HOME/.claude/settings.json"
+          node bin/install.js --uninstall
+          test ! -f "$HOME/.claude/statusline.sh"
+
+      - name: npm pack dry run
+        run: npm pack --dry-run
