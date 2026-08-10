@@ -2,10 +2,7 @@
 
 A compact, two-line status line for [Claude Code](https://claude.com/claude-code).
 
-```
-Sonnet 5 (high) | compact-status-line • main
-5h 94% (3h 51m) • 7d 11% (6d 2h)
-```
+![](.github/demo.png)
 
 Line 1: model (+ effort), directory, git branch.
 Line 2: 5-hour and 7-day rate limit usage, with time until each resets. Omitted entirely if no usage data is available.
