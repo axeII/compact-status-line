@@ -159,7 +159,8 @@ if [ -n "$five_pct" ]; then
     five_pct_i=$(printf "%.0f" "$five_pct" 2>/dev/null)
     five_color=$(color_for_pct "$five_pct_i")
     five_epoch=$(iso_to_epoch "$five_reset")
-    five_left=$(format_remaining $(( five_epoch - now_epoch )))
+    five_left=""
+    [ -n "$five_epoch" ] && five_left=$(format_remaining $(( five_epoch - now_epoch )))
 
     [ -n "$line2" ] && line2+=" ${dim}•${reset} "
     line2+="${white}5h${reset} ${five_color}${five_pct_i}%${reset}"
@@ -170,7 +171,8 @@ if [ -n "$seven_pct" ]; then
     seven_pct_i=$(printf "%.0f" "$seven_pct" 2>/dev/null)
     seven_color=$(color_for_pct "$seven_pct_i")
     seven_epoch=$(iso_to_epoch "$seven_reset")
-    seven_left=$(format_remaining $(( seven_epoch - now_epoch )))
+    seven_left=""
+    [ -n "$seven_epoch" ] && seven_left=$(format_remaining $(( seven_epoch - now_epoch )))
 
     [ -n "$line2" ] && line2+=" ${dim}•${reset} "
     line2+="${white}7d${reset} ${seven_color}${seven_pct_i}%${reset}"
