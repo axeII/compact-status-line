@@ -1,6 +1,6 @@
 {
   "name": "compact-status-line",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A compact, single-file status line for Claude Code: model, effort, directory, git branch, and rate limits",
   "bin": {
     "compact-status-line": "bin/install.js"
