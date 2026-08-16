@@ -8,8 +8,6 @@ const CLAUDE_DIR = path.join(os.homedir(), ".claude");
 const SETTINGS_FILE = path.join(CLAUDE_DIR, "settings.json");
 const STATUSLINE_DEST = path.join(CLAUDE_DIR, "statusline.sh");
 const STATUSLINE_SRC = path.resolve(__dirname, "statusline.sh");
-const CREDENTIALS_FILE = path.join(CLAUDE_DIR, ".credentials.json");
-const TOKEN_FILE = path.join(CLAUDE_DIR, "statusline-token");
 
 const blue = "\x1b[38;2;0;153;255m";
 const green = "\x1b[38;2;0;175;80m";
@@ -47,54 +45,6 @@ function checkDeps() {
   return missing;
 }
 
-// Rate limits normally arrive on stdin with every hook call. The token file
-// is only a fallback for older Claude Code versions that don't send them,
-// so the statusline script can hit the usage API itself. We resolve it once
-// here (env var, the Linux/file-based credentials store, or macOS Keychain)
-// and write it to a plain file — the statusline script then just reads that
-// file on every render instead of shelling out to the Keychain each time.
-function resolveToken() {
-  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-    return process.env.CLAUDE_CODE_OAUTH_TOKEN;
-  }
-
-  if (fs.existsSync(CREDENTIALS_FILE)) {
-    try {
-      const creds = JSON.parse(fs.readFileSync(CREDENTIALS_FILE, "utf-8"));
-      const token = creds?.claudeAiOauth?.accessToken;
-      if (token) return token;
-    } catch {
-      // ignore malformed credentials file
-    }
-  }
-
-  if (process.platform === "darwin") {
-    const { execFileSync } = require("child_process");
-    try {
-      const blob = execFileSync(
-        "security",
-        ["find-generic-password", "-s", "Claude Code-credentials", "-w"],
-        { stdio: ["ignore", "pipe", "ignore"] }
-      ).toString();
-      const token = JSON.parse(blob)?.claudeAiOauth?.accessToken;
-      if (token) return token;
-    } catch {
-      // Keychain entry not found, or access denied — that's fine.
-    }
-  }
-
-  return null;
-}
-
-function writeTokenFile() {
-  const token = resolveToken();
-  if (!token) return false;
-
-  fs.writeFileSync(TOKEN_FILE, token, { mode: 0o600 });
-  fs.chmodSync(TOKEN_FILE, 0o600);
-  return true;
-}
-
 function uninstall() {
   console.log();
   console.log(`  ${blue}compact-status-line Uninstaller${reset}`);
@@ -112,11 +62,6 @@ function uninstall() {
     success(`Removed ${dim}statusline.sh${reset}`);
   } else {
     warn("No statusline found — nothing to remove");
-  }
-
-  if (fs.existsSync(TOKEN_FILE)) {
-    fs.unlinkSync(TOKEN_FILE);
-    success(`Removed ${dim}statusline-token${reset}`);
   }
 
   if (fs.existsSync(SETTINGS_FILE)) {
@@ -174,20 +119,6 @@ function run() {
   fs.copyFileSync(STATUSLINE_SRC, STATUSLINE_DEST);
   fs.chmodSync(STATUSLINE_DEST, 0o755);
   success(`Installed statusline to ${dim}${STATUSLINE_DEST}${reset}`);
-
-  if (fs.existsSync(TOKEN_FILE)) {
-    success(`Token file already present at ${dim}${TOKEN_FILE}${reset}`);
-  } else if (writeTokenFile()) {
-    success(`Saved a usage-API token to ${dim}${TOKEN_FILE}${reset}`);
-  } else {
-    warn("No token found for the rate-limit API fallback");
-    log(
-      `  ${dim}Only needed if your Claude Code version doesn't send rate limits on stdin.${reset}`
-    );
-    log(
-      `  ${dim}To enable it, put a token in ${TOKEN_FILE} or set CLAUDE_CODE_OAUTH_TOKEN.${reset}`
-    );
-  }
 
   let settings = {};
   if (fs.existsSync(SETTINGS_FILE)) {

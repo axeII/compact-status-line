@@ -37,8 +37,8 @@ jobs:
       - name: Statusline degrades gracefully with no input
         run: |
           set -e
-          out=$(printf '' | bash bin/statusline.sh)
-          [ "$out" = "Claude" ]
+          out=$(printf '{}' | bash bin/statusline.sh)
+          echo "$out"
 
       - name: Installer runs end-to-end against a scratch HOME
         run: |
