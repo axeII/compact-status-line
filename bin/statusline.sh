@@ -8,7 +8,7 @@ get() {
   printf '%s' "$input" | jq -r "$1 // empty" 2>/dev/null
 }
 
-CYAN='\033[36m'; GRAY='\033[37m'; GREEN='\033[32m'; YELLOW='\033[33m'; RED='\033[31m'; RESET='\033[0m'
+CYAN='\033[36m'; GRAY='\033[37m'; GREEN='\033[32m'; YELLOW='\033[33m'; RED='\033[31m'; PURPLE='\033[35m'; RESET='\033[0m'
 
 # Green under 70%, yellow 70-89%, red 90%+.
 level_color() {
@@ -16,6 +16,27 @@ level_color() {
   if [ "$pct" -ge 90 ]; then printf '%s' "$RED"
   elif [ "$pct" -ge 70 ]; then printf '%s' "$YELLOW"
   else printf '%s' "$GREEN"; fi
+}
+
+# Eighth-block glyphs, for a smoother fill than a plain filled/empty cell.
+EIGHTHS=(' ' '▏' '▎' '▍' '▌' '▋' '▊' '▉' '█')
+
+# Renders a "snake" bar: full block cells, one partial eighth-block cell for
+# the remainder, then empty cells. Width is in whole cells.
+build_bar() {
+  local pct=$1 width=$2
+  local total=$(( (pct * width * 8 + 50) / 100 ))
+  [ "$total" -gt $((width * 8)) ] && total=$((width * 8))
+  local full=$(( total / 8 ))
+  local rem=$(( total % 8 ))
+  local bar="" i
+  for (( i = 0; i < full; i++ )); do bar+="█"; done
+  if [ "$rem" -gt 0 ] && [ "$full" -lt "$width" ]; then
+    bar+="${EIGHTHS[$rem]}"
+    full=$((full + 1))
+  fi
+  for (( i = full; i < width; i++ )); do bar+="░"; done
+  printf '%s' "$bar"
 }
 
 cwd="$(get '.workspace.current_dir')"
@@ -65,30 +86,27 @@ ctx_pct="$(get '.context_window.used_percentage')"
 ctx_part=""
 if [ -n "$ctx_pct" ]; then
   ctx_int="$(LC_ALL=C printf '%.0f' "$ctx_pct")"
-  bar_width=10
-  filled=$(( (ctx_int * bar_width + 50) / 100 ))
-  [ "$filled" -gt "$bar_width" ] && filled=$bar_width
-  empty=$((bar_width - filled))
-  bar=""
-  [ "$filled" -gt 0 ] && printf -v fill "%${filled}s" && bar="${fill// /█}"
-  [ "$empty" -gt 0 ] && printf -v pad "%${empty}s" && bar="${bar}${pad// /░}"
   ctx_color="$(level_color "$ctx_int")"
-  ctx_part=" | ${ctx_color}${bar} ${ctx_int}%${RESET}"
+  ctx_bar="$(build_bar "$ctx_int" 10)"
+  ctx_part=" | ${ctx_color}${ctx_bar} ${ctx_int}%${RESET}"
 fi
 
 # 5h / 7-day rate-limit usage — only present for Claude.ai subscribers after
-# the first API response of the session; omitted otherwise. Percent first.
+# the first API response of the session; omitted otherwise. Purple snake
+# bars regardless of level, so they read as "usage" rather than "alert".
 five="$(get '.rate_limits.five_hour.used_percentage')"
 week="$(get '.rate_limits.seven_day.used_percentage')"
 limits_part=""
 lp=""
 if [ -n "$five" ]; then
   five_int="$(LC_ALL=C printf '%.0f' "$five")"
-  lp="$(level_color "$five_int")${five_int}%${RESET} ${GRAY}5h${RESET}"
+  five_bar="$(build_bar "$five_int" 8)"
+  lp="${PURPLE}${five_bar} ${five_int}%${RESET} ${GRAY}5h${RESET}"
 fi
 if [ -n "$week" ]; then
   week_int="$(LC_ALL=C printf '%.0f' "$week")"
-  w="$(level_color "$week_int")${week_int}%${RESET} ${GRAY}7d${RESET}"
+  week_bar="$(build_bar "$week_int" 8)"
+  w="${PURPLE}${week_bar} ${week_int}%${RESET} ${GRAY}7d${RESET}"
   lp="${lp:+$lp }$w"
 fi
 [ -n "$lp" ] && limits_part=" | $lp"
