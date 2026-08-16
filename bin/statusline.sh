@@ -19,10 +19,13 @@ level_color() {
 }
 
 # Renders a "snake" bar: filled block cells up to pct of width, faint
-# block cells for the rest.
+# block cells for the rest. Any nonzero pct shows at least one filled
+# cell, since a bar's width is often too coarse to round it up on its
+# own (e.g. 5% on an 8-cell bar rounds to zero otherwise).
 build_bar() {
   local pct=$1 width=$2
   local filled=$(( (pct * width + 50) / 100 ))
+  [ "$filled" -eq 0 ] && [ "$pct" -gt 0 ] && filled=1
   [ "$filled" -gt "$width" ] && filled=$width
   local empty=$((width - filled))
   local bar="" i
