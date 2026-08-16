@@ -18,24 +18,17 @@ level_color() {
   else printf '%s' "$GREEN"; fi
 }
 
-# Eighth-block glyphs, for a smoother fill than a plain filled/empty cell.
-EIGHTHS=(' ' '▏' '▎' '▍' '▌' '▋' '▊' '▉' '█')
-
-# Renders a "snake" bar: full block cells, one partial eighth-block cell for
-# the remainder, then empty cells. Width is in whole cells.
+# Renders a dotted "snake" bar: filled dots up to pct of width, faint dots
+# for the rest. Whole cells only — no thin partial glyph, since at low
+# percentages that read as a stray text cursor rather than a bar.
 build_bar() {
   local pct=$1 width=$2
-  local total=$(( (pct * width * 8 + 50) / 100 ))
-  [ "$total" -gt $((width * 8)) ] && total=$((width * 8))
-  local full=$(( total / 8 ))
-  local rem=$(( total % 8 ))
+  local filled=$(( (pct * width + 50) / 100 ))
+  [ "$filled" -gt "$width" ] && filled=$width
+  local empty=$((width - filled))
   local bar="" i
-  for (( i = 0; i < full; i++ )); do bar+="█"; done
-  if [ "$rem" -gt 0 ] && [ "$full" -lt "$width" ]; then
-    bar+="${EIGHTHS[$rem]}"
-    full=$((full + 1))
-  fi
-  for (( i = full; i < width; i++ )); do bar+="░"; done
+  for (( i = 0; i < filled; i++ )); do bar+="●"; done
+  for (( i = 0; i < empty; i++ )); do bar+="·"; done
   printf '%s' "$bar"
 }
 
