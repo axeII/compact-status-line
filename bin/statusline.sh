@@ -18,17 +18,16 @@ level_color() {
   else printf '%s' "$GREEN"; fi
 }
 
-# Renders a dotted "snake" bar: filled dots up to pct of width, faint dots
-# for the rest. Whole cells only — no thin partial glyph, since at low
-# percentages that read as a stray text cursor rather than a bar.
+# Renders a "snake" bar: filled block cells up to pct of width, faint
+# block cells for the rest.
 build_bar() {
   local pct=$1 width=$2
   local filled=$(( (pct * width + 50) / 100 ))
   [ "$filled" -gt "$width" ] && filled=$width
   local empty=$((width - filled))
   local bar="" i
-  for (( i = 0; i < filled; i++ )); do bar+="●"; done
-  for (( i = 0; i < empty; i++ )); do bar+="·"; done
+  for (( i = 0; i < filled; i++ )); do bar+="█"; done
+  for (( i = 0; i < empty; i++ )); do bar+="░"; done
   printf '%s' "$bar"
 }
 
