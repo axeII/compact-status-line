@@ -4,7 +4,9 @@ A compact, single-line status line for [Claude Code](https://claude.com/claude-c
 
 ![](.github/demo.png)
 
-One line: directory (`~`-relative, collapsed if deep) · git branch with dirty/ahead-behind markers, then model (+ effort), a filling context-usage bar, and 5-hour/7-day rate limit usage. Each rate-limit/context segment is colored green/yellow/red by percentage, and omitted entirely if the data isn't available.
+One line: directory (`~`-relative, collapsed if deep) · git branch with dirty/ahead-behind markers, then `[model (context size)]` (+ effort), a filling context-usage bar, and 5-hour/weekly rate limit usage with time-to-reset (e.g. `Usage ▓▓░░░░░░ 30% (1h 46m / 5h)`). Each rate-limit/context segment is colored green/yellow/red by percentage, and omitted entirely if the data isn't available.
+
+Colors are chosen to stay legible in both light and dark terminal themes: level colors (green/yellow/red) and the model/usage accents use standard ANSI hues rather than a fixed light- or dark-only palette, and muted text (labels, effort, reset countdowns) uses the terminal's own dim attribute instead of a hard-coded gray — so nothing washes out on either background.
 
 ## Install
 

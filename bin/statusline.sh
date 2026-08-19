@@ -8,7 +8,10 @@ get() {
   printf '%s' "$input" | jq -r "$1 // empty" 2>/dev/null
 }
 
-CYAN='\033[36m'; GRAY='\033[37m'; GREEN='\033[32m'; YELLOW='\033[33m'; RED='\033[31m'; PURPLE='\033[35m'; RESET='\033[0m'
+CYAN='\033[36m'; DIM='\033[2m'; GREEN='\033[32m'; YELLOW='\033[33m'; RED='\033[31m'; PURPLE='\033[35m'; RESET='\033[0m'
+# DIM (SGR 2) rather than a hard-coded gray: it dims whatever the terminal's
+# own foreground already is, so it stays legible on both light and dark
+# backgrounds instead of washing out on one of them.
 
 # Green under 70%, yellow 70-89%, red 90%+.
 level_color() {
@@ -32,6 +35,21 @@ build_bar() {
   for (( i = 0; i < filled; i++ )); do bar+="█"; done
   for (( i = 0; i < empty; i++ )); do bar+="░"; done
   printf '%s' "$bar"
+}
+
+# Formats a countdown in seconds as "Xd" once a day or more remains, else
+# "Xh Ym" (or "Ym" under an hour).
+format_remaining() {
+  local secs=$1
+  [ "$secs" -lt 0 ] && secs=0
+  local days=$(( secs / 86400 ))
+  if [ "$days" -ge 1 ]; then
+    printf '%dd' "$days"
+  else
+    local hours=$(( secs / 3600 )) mins=$(( (secs % 3600) / 60 ))
+    if [ "$hours" -ge 1 ]; then printf '%dh %dm' "$hours" "$mins"
+    else printf '%dm' "$mins"; fi
+  fi
 }
 
 cwd="$(get '.workspace.current_dir')"
@@ -69,12 +87,21 @@ if command -v git >/dev/null 2>&1 && git -C "$cwd" rev-parse --is-inside-work-tr
 fi
 
 model="$(get '.model.display_name')"
-model_colored="${CYAN}${model}${RESET}"
+
+# Extended-context models (e.g. 1M-token Sonnet/Opus) get a "(1M context)"
+# annotation; the default 200K window isn't worth calling out.
+ctx_size="$(get '.context_window.context_window_size')"
+ctx_annotation=""
+if [ -n "$ctx_size" ] && [ "$ctx_size" -gt 200000 ] 2>/dev/null; then
+  ctx_m=$(( ctx_size / 1000000 ))
+  [ "$ctx_m" -ge 1 ] && ctx_annotation=" (${ctx_m}M context)"
+fi
+model_colored="${CYAN}[${model}${ctx_annotation}]${RESET}"
 
 # Reasoning effort, only shown when Claude Code actually exposes it.
 effort="$(get '.effort.level')"
 effort_part=""
-[ -n "$effort" ] && effort_part=" ${GRAY}(${effort})${RESET}"
+[ -n "$effort" ] && effort_part=" ${DIM}(${effort})${RESET}"
 
 # Context window usage — filling "snake" bar (█ filled / ░ empty).
 ctx_pct="$(get '.context_window.used_percentage')"
@@ -83,26 +110,36 @@ if [ -n "$ctx_pct" ]; then
   ctx_int="$(LC_ALL=C printf '%.0f' "$ctx_pct")"
   ctx_color="$(level_color "$ctx_int")"
   ctx_bar="$(build_bar "$ctx_int" 10)"
-  ctx_part=" | ${ctx_color}${ctx_bar} ${ctx_int}%${RESET}"
+  ctx_part=" ${ctx_color}${ctx_bar} ${ctx_int}%${RESET}"
 fi
 
 # 5h / 7-day rate-limit usage — only present for Claude.ai subscribers after
 # the first API response of the session; omitted otherwise. Purple snake
 # bars regardless of level, so they read as "usage" rather than "alert".
+# Each is labeled with the time left until that window resets.
+now="$(date +%s)"
 five="$(get '.rate_limits.five_hour.used_percentage')"
+five_resets="$(get '.rate_limits.five_hour.resets_at')"
 week="$(get '.rate_limits.seven_day.used_percentage')"
+week_resets="$(get '.rate_limits.seven_day.resets_at')"
 limits_part=""
 lp=""
 if [ -n "$five" ]; then
   five_int="$(LC_ALL=C printf '%.0f' "$five")"
   five_bar="$(build_bar "$five_int" 8)"
-  lp="${PURPLE}${five_bar} ${five_int}%${RESET} ${GRAY}5h${RESET}"
+  five_left=""
+  case "$five_resets" in ''|*[!0-9]*) ;; *) five_left="$(format_remaining $(( five_resets - now )))" ;; esac
+  lp="${DIM}Usage${RESET} ${PURPLE}${five_bar}${RESET} ${five_int}%"
+  [ -n "$five_left" ] && lp="${lp} ${DIM}(${five_left} / 5h)${RESET}"
 fi
 if [ -n "$week" ]; then
   week_int="$(LC_ALL=C printf '%.0f' "$week")"
   week_bar="$(build_bar "$week_int" 8)"
-  w="${PURPLE}${week_bar} ${week_int}%${RESET} ${GRAY}7d${RESET}"
-  lp="${lp:+$lp }$w"
+  week_left=""
+  case "$week_resets" in ''|*[!0-9]*) ;; *) week_left="$(format_remaining $(( week_resets - now )))" ;; esac
+  w="${DIM}Weekly${RESET} ${PURPLE}${week_bar}${RESET} ${week_int}%"
+  [ -n "$week_left" ] && w="${w} ${DIM}(${week_left} / Weekly)${RESET}"
+  lp="${lp:+$lp | }$w"
 fi
 [ -n "$lp" ] && limits_part=" | $lp"
 
