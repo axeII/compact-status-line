@@ -2,7 +2,8 @@
 
 A compact, single-line status line for [Claude Code](https://claude.com/claude-code).
 
-![](.github/demo.png)
+<img width="1701" height="146" alt="image" src="https://github.com/user-attachments/assets/4f5a9d12-90a3-4059-a23c-f000389fa390" />
+
 
 One line: directory (`~`-relative, collapsed if deep) · git branch with dirty/ahead-behind markers, then `[model (context size)]` (+ effort), a filling context-usage bar, and 5-hour/weekly rate limit usage with time-to-reset (e.g. `Usage ▓▓░░░░░░ 30% (1h 46m / 5h)`). Each rate-limit/context segment is colored green/yellow/red by percentage, and omitted entirely if the data isn't available.
 
